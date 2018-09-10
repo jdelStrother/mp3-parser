@@ -12,6 +12,7 @@ const util = require("../util");
 
 // The module under test
 const lib = require("../../lib/lib");
+const id3v2 = require("../../lib/id3v2");
 
 // Helper to load MPEG test files
 var dataViewFromTestFilePath = testFilePath =>
@@ -58,12 +59,15 @@ describe("lib", () => {
 
     describe("readFrame", () => {
         const layerDescriptions = {2: 'Layer II', 3: 'Layer III' };
-        const mpegAudioVersions = {1: 'MPEG Version 1 (ISO/IEC 11172-3)', 2: 'MPEG Version 2 (ISO/IEC 13818-3)'};
+        const mpegAudioVersions = {1: 'MPEG Version 1 (ISO/IEC 11172-3)', 2: 'MPEG Version 2 (ISO/IEC 13818-3)', 25: 'MPEG Version 2.5 (unofficial)' };
 
         // Run typical expectations for a frame of given `layer` & `version`
-        const expectFrameLV = (frame, layer, version) => {
+        const expectFrameLV = (frame, layer, version, options) => {
+            if (!options) options = {}
+            const expectedOffset = options.offset || 0
+
             expect(frame._section.type).toEqual("frame");
-            expect(frame._section.offset).toEqual(0);
+            expect(frame._section.offset).toEqual(expectedOffset);
 
             expect(frame.header._section.type).toEqual("frameHeader");
             expect(frame.header.layerDescription).toEqual(layerDescriptions[layer]);
@@ -113,5 +117,29 @@ describe("lib", () => {
             expect(frame.header.samplingRate).toEqual(22050);
             expect(frame.header.channelMode).toEqual("Stereo");
         });
-    });
+
+        it("should read frame of MPEG layer3 v2 22.05KHz 128kbps mono file", () => {
+          const fileView = dataViewFromTestFilePath("layer3/v2/22050_128_m.mp3");
+
+          const tag = id3v2.readId3v2Tag(fileView)
+          const frame = lib.readFrame(fileView, tag._section.byteLength);
+
+          expectFrameLV(frame, 3, 2, {offset: tag._section.byteLength});
+          expect(frame.header.bitrate).toEqual(128);
+          expect(frame.header.samplingRate).toEqual(22050);
+          expect(frame.header.channelMode).toEqual("Single channel (Mono)");
+        });
+
+        it("should read frame of MPEG layer3 v2.5 8KHz 96kbps stereo file", () => {
+          const fileView = dataViewFromTestFilePath("layer3/v2.5/08000_096_s.mp3");
+
+          const tag = id3v2.readId3v2Tag(fileView)
+          const frame = lib.readFrame(fileView, tag._section.byteLength);
+
+          expectFrameLV(frame, 3, 25, {offset: tag._section.byteLength});
+          expect(frame.header.bitrate).toEqual(96);
+          expect(frame.header.samplingRate).toEqual(8000);
+          expect(frame.header.channelMode).toEqual("Joint stereo (Stereo)");
+        });
+      });
 });
